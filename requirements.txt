@@ -1,0 +1,53 @@
+# ---------- Core web framework ----------
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+python-multipart==0.0.9          # file uploads
+pydantic==2.9.2
+python-jose[cryptography]==3.3.0 # JWT session tokens
+bcrypt==4.2.0                    # OTP hashing (passlib is unmaintained/incompatible with modern bcrypt)
+
+# ---------- Database ----------
+sqlalchemy==2.0.35
+alembic==1.13.2                  # DB migrations (optional but recommended)
+
+# ---------- Document ingestion (PDF / PPTX / DOCX / images) ----------
+pypdf==4.3.1                     # PDF text extraction
+pdf2image==1.17.0                # PDF page -> image (for OCR fallback & handwriting)
+python-pptx==1.0.2               # PPTX parsing
+python-docx==1.1.2               # DOCX parsing
+pytesseract==0.3.13               # OCR engine wrapper (needs system Tesseract binary)
+Pillow==10.4.0                   # image handling
+
+# ---------- Handwriting recognition ----------
+# Option A (simplest, cloud): use Google Cloud Vision / Azure Form Recognizer API (no extra pip lib needed, just `requests`)
+# Option B (offline/open-source): TrOCR from HuggingFace transformers
+transformers==4.44.2
+torch==2.4.1                     # required by transformers/TrOCR and sentence-transformers
+
+# ---------- RAG: embeddings + vector store ----------
+sentence-transformers==3.1.1     # text embeddings
+faiss-cpu==1.8.0.post1           # vector similarity search
+
+# ---------- LLM for grounded answer generation ----------
+anthropic==0.34.2                # Claude API client (swap for openai==1.x if preferred)
+
+# ---------- Speech-to-text (voice questions) ----------
+openai-whisper==20231117         # offline speech-to-text (or use a cloud STT API instead)
+
+# ---------- Knowledge / dependency graph ----------
+networkx==3.3
+
+# ---------- Scheduling & reminders ----------
+apscheduler==3.10.4              # background job scheduler for reminders
+
+# ---------- SMS OTP (mobile-number login) ----------
+twilio==9.3.2                    # SMS OTP provider (swap for any local SMS gateway)
+
+# ---------- Utilities ----------
+python-dotenv==1.0.1
+requests==2.32.3
+numpy==1.26.4
+
+# ---------- Dev / testing ----------
+pytest==8.3.3
+httpx==0.27.2

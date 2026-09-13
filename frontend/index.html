@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Learning Assistant</title>
+<style>
+  :root { --bg:#0f172a; --card:#1e293b; --accent:#6366f1; --text:#e2e8f0; --muted:#94a3b8; }
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); margin:0; padding:16px; max-width:480px; margin:auto; }
+  h1 { font-size: 1.3rem; }
+  .card { background: var(--card); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  input, button, select, textarea { width:100%; padding:10px; margin:6px 0; border-radius:8px; border:1px solid #334155; background:#0f172a; color:var(--text); }
+  button { background: var(--accent); border:none; font-weight:600; cursor:pointer; }
+  .muted { color: var(--muted); font-size: 0.85rem; }
+  .source { border-left:3px solid var(--accent); padding-left:8px; margin-top:8px; font-size:0.85rem; }
+  .hidden { display:none; }
+  .tabs { display:flex; gap:8px; margin-bottom:12px; }
+  .tabs button { background:#334155; }
+  .tabs button.active { background: var(--accent); }
+</style>
+</head>
+<body>
+  <h1>📚 Learning Assistant</h1>
+
+  <!-- LOGIN -->
+  <div id="loginView" class="card">
+    <p class="muted">Log in with your mobile number</p>
+    <input id="mobileInput" placeholder="+91XXXXXXXXXX" type="tel" inputmode="numeric" maxlength="16" oninput="sanitizeMobileInput(this)" />
+    <button onclick="requestOTP()">Send OTP</button>
+    <input id="otpInput" placeholder="Enter OTP" class="hidden" type="tel" inputmode="numeric" maxlength="6" oninput="this.value = this.value.replace(/[^0-9]/g, '')" />
+    <button id="verifyBtn" class="hidden" onclick="verifyOTP()">Verify & Login</button>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="dashboardView" class="hidden">
+    <div class="tabs">
+      <button onclick="showTab('ask')" class="active" id="tab-ask">Ask</button>
+      <button onclick="showTab('upload')" id="tab-upload">Upload</button>
+      <button onclick="showTab('quiz')" id="tab-quiz">Quiz</button>
+      <button onclick="showTab('schedule')" id="tab-schedule">Schedule</button>
+    </div>
+
+    <div id="view-ask" class="card">
+      <textarea id="questionInput" placeholder="Ask a question about your material..."></textarea>
+      <button onclick="askQuestion()">Ask</button>
+      <div id="answerBox"></div>
+    </div>
+
+    <div id="view-upload" class="card hidden">
+      <input type="file" id="fileInput" />
+      <label class="muted"><input type="checkbox" id="handwrittenCheck" style="width:auto;"> This is a handwritten note</label>
+      <input id="subjectInput" placeholder="Subject (optional)" />
+      <button onclick="uploadFile()">Upload</button>
+      <div id="uploadStatus" class="muted"></div>
+    </div>
+
+    <div id="view-quiz" class="card hidden">
+      <button onclick="generateQuiz()">Generate Adaptive Quiz</button>
+      <div id="quizBox"></div>
+    </div>
+
+    <div id="view-schedule" class="card hidden">
+      <p class="muted">Upcoming study sessions</p>
+      <button onclick="loadSchedule()">Refresh</button>
+      <div id="scheduleBox"></div>
+    </div>
+  </div>
+
+<script>
+const API = "http://localhost:8000";
+let token = localStorage.getItem("token") || null;
+
+if (token) { document.getElementById("loginView").classList.add("hidden"); document.getElementById("dashboardView").classList.remove("hidden"); }
+
+function sanitizeMobileInput(el) {
+  // Allow a single leading "+" for country code, digits only everywhere else.
+  let value = el.value;
+  let plus = value.startsWith("+") ? "+" : "";
+  let digits = value.replace(/[^0-9]/g, "");
+  el.value = plus + digits;
+}
+
+function isValidMobile(mobile) {
+  return /^\+?[0-9]{7,15}$/.test(mobile);
+}
+
+async function requestOTP() {
+  const mobile = document.getElementById("mobileInput").value.trim();
+  if (!mobile) { alert("Enter a mobile number first."); return; }
+  if (!isValidMobile(mobile)) {
+    alert("Enter a valid mobile number — digits only, optionally starting with + and a country code.");
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API}/auth/request-otp`, {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({mobile_number: mobile})
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert(`Failed to send OTP (${res.status}): ${err.detail || res.statusText}`);
+      return;
+    }
+    document.getElementById("otpInput").classList.remove("hidden");
+    document.getElementById("verifyBtn").classList.remove("hidden");
+    alert("OTP sent. In dev mode (no Twilio configured), check the terminal running `uvicorn` for the code.");
+  } catch (e) {
+    alert(
+      "Could not reach the backend at " + API + ".\n\n" +
+      "Checklist:\n" +
+      "1. Is `uvicorn app.main:app --reload` running?\n" +
+      "2. Are you opening this page via http://localhost:5500 (not double-clicking the file)?\n" +
+      "3. Open the browser console (F12) for the exact network error."
+    );
+    console.error(e);
+  }
+}
+
+async function verifyOTP() {
+  const mobile = document.getElementById("mobileInput").value.trim();
+  const code = document.getElementById("otpInput").value.trim();
+  try {
+    const res = await fetch(`${API}/auth/verify-otp`, {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({mobile_number: mobile, code})
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      alert(`Login failed (${res.status}): ${data.detail || res.statusText}`);
+      return;
+    }
+    token = data.access_token;
+    localStorage.setItem("token", token);
+    document.getElementById("loginView").classList.add("hidden");
+    document.getElementById("dashboardView").classList.remove("hidden");
+  } catch (e) {
+    alert("Could not reach the backend at " + API + ". Is uvicorn running?");
+    console.error(e);
+  }
+}
+
+function authHeaders(extra = {}) {
+  return { "Authorization": `Bearer ${token}`, ...extra };
+}
+
+function showTab(name) {
+  ["ask","upload","quiz","schedule"].forEach(t => {
+    document.getElementById(`view-${t}`).classList.toggle("hidden", t !== name);
+    document.getElementById(`tab-${t}`).classList.toggle("active", t === name);
+  });
+}
+
+async function askQuestion() {
+  const question = document.getElementById("questionInput").value;
+  const res = await fetch(`${API}/qa/ask`, { method: "POST", headers: authHeaders({"Content-Type":"application/json"}), body: JSON.stringify({question}) });
+  const data = await res.json();
+  let html = `<p>${data.answer}</p>`;
+  (data.sources || []).forEach(s => {
+    html += `<div class="source">📄 ${s.document_name} — ${s.page_or_slide || ""}<br><span class="muted">${s.excerpt}</span></div>`;
+  });
+  document.getElementById("answerBox").innerHTML = html;
+}
+
+async function uploadFile() {
+  const file = document.getElementById("fileInput").files[0];
+  const subject = document.getElementById("subjectInput").value;
+  const isHandwritten = document.getElementById("handwrittenCheck").checked;
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("subject", subject);
+  formData.append("is_handwritten", isHandwritten);
+  const res = await fetch(`${API}/documents/upload`, { method: "POST", headers: authHeaders(), body: formData });
+  const data = await res.json();
+  document.getElementById("uploadStatus").innerText = `Status: ${data.status} (doc #${data.document_id})`;
+}
+
+async function generateQuiz() {
+  const res = await fetch(`${API}/quiz/generate`, { method: "POST", headers: authHeaders() });
+  const questions = await res.json();
+  let html = "";
+  questions.forEach(q => {
+    html += `<div class="card"><p>${q.question}</p>`;
+    (q.options || []).forEach(opt => {
+      html += `<button onclick="submitAnswer(${q.id}, '${opt.replace(/'/g,"\\'")}')">${opt}</button>`;
+    });
+    html += `</div>`;
+  });
+  document.getElementById("quizBox").innerHTML = html;
+}
+
+async function submitAnswer(questionId, selected) {
+  const res = await fetch(`${API}/quiz/answer`, { method: "POST", headers: authHeaders({"Content-Type":"application/json"}), body: JSON.stringify({question_id: questionId, selected_answer: selected}) });
+  const data = await res.json();
+  alert(data.correct ? "✅ Correct!" : `❌ Incorrect. Correct answer: ${data.correct_answer}`);
+}
+
+async function loadSchedule() {
+  const res = await fetch(`${API}/schedule/upcoming`, { headers: authHeaders() });
+  const sessions = await res.json();
+  document.getElementById("scheduleBox").innerHTML = sessions.map(s =>
+    `<div class="source">🕒 ${new Date(s.start).toLocaleString()} → ${new Date(s.end).toLocaleTimeString()}</div>`
+  ).join("") || "<p class='muted'>No sessions scheduled yet.</p>";
+}
+</script>
+</body>
+</html>
